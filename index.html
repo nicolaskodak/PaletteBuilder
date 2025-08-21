@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖片區域色碼檢查器 (含色盤)</title>
+    <!-- 引入 Tailwind CSS 以進行樣式設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+        }
+        .file-input-button {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #imageCanvas.loaded, #mobileImageCanvas.loaded {
+            cursor: crosshair;
+        }
+        /* 美化顏色選擇器 */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            padding: 0;
+            overflow: hidden;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+            border-radius: 6px;
+        }
+        /* 拖曳區域的視覺效果 */
+        .drag-over {
+            border-color: #4f46e5 !important; /* indigo-600 */
+            background-color: #e0e7ff; /* indigo-100 */
+        }
+        .dark .drag-over {
+            border-color: #818cf8; /* indigo-400 */
+            background-color: #3730a3; /* indigo-800 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8">
+        
+        <header class="text-center mb-6">
+            <h1 class="text-2xl md:text-3xl font-bold text-indigo-600 dark:text-indigo-400">圖片區域色碼檢查器</h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-2">上傳圖片，移動滑鼠查看顏色，點擊即可存入色盤。</p>
+        </header>
+
+        <main>
+            <!-- 檔案上傳區域 -->
+            <div class="mb-6 text-center">
+                <label for="imageLoader" class="file-input-button inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg shadow-md">
+                    選擇圖片
+                </label>
+                <input type="file" id="imageLoader" name="imageLoader" accept="image/*" class="hidden"/>
+            </div>
+
+            <!-- 主要內容區域：圖片和顏色資訊 -->
+            <div id="content-area" class="hidden md:flex md:space-x-8 items-start">
+                
+                <!-- 左側：圖片畫布與拖曳區 -->
+                <div id="dropZoneDesktop" class="flex-grow bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden shadow-inner flex items-center justify-center p-2 border-2 border-dashed border-gray-300 dark:border-gray-600 transition-colors duration-300" style="min-height: 300px;">
+                     <div class="text-center">
+                        <canvas id="imageCanvas" class="max-w-full max-h-full object-contain hidden"></canvas>
+                        <p id="canvas-placeholder" class="text-gray-500 dark:text-gray-400 px-4">請選擇圖片，或將圖片拖曳至此區域</p>
+                     </div>
+                </div>
+
+                <!-- 右側：顏色資訊與色盤 -->
+                <div class="w-full md:w-64 flex-shrink-0 mt-6 md:mt-0 space-y-6">
+                    <!-- 即時顏色資訊 -->
+                    <div>
+                        <h2 class="text-lg font-semibold mb-3 border-b pb-2 border-gray-300 dark:border-gray-600">即時顏色資訊</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <p class="text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">預覽</p>
+                                <div id="colorPreview" class="w-full h-24 rounded-lg border-4 border-white dark:border-gray-500 shadow-md" style="background-color: #f3f4f6;"></div>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">RGB</p>
+                                <div id="rgbValue" class="bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-2 text-center font-mono tracking-wider cursor-pointer" title="點擊複製">N/A</div>
+                            </div>
+                            <div>
+                                <p class="text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">HEX</p>
+                                <div id="hexValue" class="bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-2 text-center font-mono tracking-wider cursor-pointer" title="點擊複製">N/A</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 我的色盤 -->
+                    <div id="palette-section-desktop"></div>
+                </div>
+            </div>
+             <!-- 行動裝置的垂直佈局 -->
+            <div id="mobile-content-area" class="hidden md:hidden space-y-6">
+                 <!-- 即時顏色資訊 -->
+                <div class="w-full">
+                     <h2 class="text-lg font-semibold mb-3 border-b pb-2 border-gray-300 dark:border-gray-600">即時顏色資訊</h2>
+                     <div class="flex items-center space-x-4">
+                         <div id="mobileColorPreview" class="w-16 h-16 rounded-lg border-4 border-white dark:border-gray-500 shadow-md flex-shrink-0" style="background-color: #f3f4f6;"></div>
+                         <div class="flex-grow space-y-2">
+                            <div id="mobileRgbValue" class="bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-2 text-sm text-center font-mono tracking-wider cursor-pointer" title="點擊複製">RGB: N/A</div>
+                            <div id="mobileHexValue" class="bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-2 text-sm text-center font-mono tracking-wider cursor-pointer" title="點擊複製">HEX: N/A</div>
+                         </div>
+                     </div>
+                </div>
+                <!-- 圖片畫布與拖曳區 -->
+                <div id="dropZoneMobile" class="bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden shadow-inner flex items-center justify-center p-2 border-2 border-dashed border-gray-300 dark:border-gray-600 transition-colors duration-300" style="min-height: 200px;">
+                    <div class="text-center">
+                        <canvas id="mobileImageCanvas" class="max-w-full max-h-full object-contain hidden"></canvas>
+                        <p id="mobile-canvas-placeholder" class="text-gray-500 dark:text-gray-400 px-4">請選擇圖片，或將圖片拖曳至此區域</p>
+                    </div>
+                </div>
+                <!-- 我的色盤 (行動版) -->
+                <div id="palette-section-mobile"></div>
+            </div>
+        </main>
+        
+        <!-- 提示訊息 -->
+        <div id="toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transition-opacity duration-300"></div>
+        <div id="toast-error" class="fixed bottom-5 right-5 bg-red-500 text-white py-2 px-4 rounded-lg shadow-lg opacity-0 transition-opacity duration-300"></div>
+    </div>
+
+    <script>
+        // --- DOM 元素獲取 ---
+        const imageLoader = document.getElementById('imageLoader');
+        const dropZoneDesktop = document.getElementById('dropZoneDesktop');
+        const dropZoneMobile = document.getElementById('dropZoneMobile');
+        const canvas = document.getElementById('imageCanvas');
+        const mobileCanvas = document.getElementById('mobileImageCanvas');
+        const ctx = canvas.getContext('2d');
+        const mobileCtx = mobileCanvas.getContext('2d');
+        
+        const contentArea = document.getElementById('content-area');
+        const mobileContentArea = document.getElementById('mobile-content-area');
+        const canvasPlaceholder = document.getElementById('canvas-placeholder');
+        const mobileCanvasPlaceholder = document.getElementById('mobile-canvas-placeholder');
+        
+        const colorPreview = document.getElementById('colorPreview');
+        const rgbValue = document.getElementById('rgbValue');
+        const hexValue = document.getElementById('hexValue');
+        
+        const mobileColorPreview = document.getElementById('mobileColorPreview');
+        const mobileRgbValue = document.getElementById('mobileRgbValue');
+        const mobileHexValue = document.getElementById('mobileHexValue');
+
+        const paletteSectionDesktop = document.getElementById('palette-section-desktop');
+        const paletteSectionMobile = document.getElementById('palette-section-mobile');
+
+        const toast = document.getElementById('toast');
+        const toastError = document.getElementById('toast-error');
+
+        // --- 狀態管理 ---
+        let paletteColors = [];
+        const MAX_PALETTE_SIZE = 5;
+
+        // --- 核心功能 ---
+
+        // 處理單一圖片檔案
+        function handleFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                showToast('請上傳有效的圖片檔案', 'error');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    [canvas, mobileCanvas].forEach(c => {
+                        c.width = img.width;
+                        c.height = img.height;
+                        c.getContext('2d').drawImage(img, 0, 0);
+                        c.classList.add('loaded');
+                        c.classList.remove('hidden');
+                    });
+                    contentArea.classList.remove('hidden');
+                    mobileContentArea.classList.remove('hidden');
+                    canvasPlaceholder.classList.add('hidden');
+                    mobileCanvasPlaceholder.classList.add('hidden');
+                    if (paletteColors.length === 0) {
+                        renderPalette(); 
+                    }
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 渲染色盤 UI
+        function renderPalette() {
+            const paletteHTML = `
+                <h2 class="text-lg font-semibold mb-3 border-b pb-2 border-gray-300 dark:border-gray-600">我的色盤 (${paletteColors.length}/${MAX_PALETTE_SIZE})</h2>
+                <div class="flex items-center space-x-2 mb-2">
+                    <input type="color" id="colorPicker" value="#FFFFFF" class="border border-gray-300 dark:border-gray-600">
+                    <input type="text" id="hexInput" placeholder="或貼上HEX色碼" class="flex-grow bg-gray-200 dark:bg-gray-700 rounded-md px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="flex items-center space-x-2 mb-4">
+                    <button id="addColorBtn" class="w-1/2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold py-2 px-3 rounded-md">新增</button>
+                    <button id="clearPaletteBtn" class="w-1/2 bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2 px-3 rounded-md">清空</button>
+                </div>
+                <div id="paletteContainer" class="space-y-2">
+                    ${[...Array(MAX_PALETTE_SIZE)].map((_, i) => {
+                        const color = paletteColors[i];
+                        if (color) {
+                            return `
+                                <div class="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <div class="w-8 h-8 rounded-md border-2 border-white dark:border-gray-500" style="background-color: ${color.hex};"></div>
+                                    <div class="flex-grow font-mono text-xs">
+                                        <p class="cursor-pointer" title="點擊複製">${color.hex}</p>
+                                        <p class="cursor-pointer text-gray-500 dark:text-gray-400" title="點擊複製">rgb(${color.r}, ${color.g}, ${color.b})</p>
+                                    </div>
+                                    <button class="remove-color-btn text-gray-400 hover:text-red-500 font-bold text-xl" data-index="${i}" title="移除顏色">&times;</button>
+                                </div>
+                            `;
+                        } else {
+                            return `
+                                <div class="flex items-center space-x-2 p-2 h-[56px] border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                                    <div class="w-8 h-8 rounded-md bg-gray-200 dark:bg-gray-600"></div>
+                                    <p class="text-xs text-gray-400">空</p>
+                                </div>
+                            `;
+                        }
+                    }).join('')}
+                </div>
+            `;
+            paletteSectionDesktop.innerHTML = paletteHTML;
+            paletteSectionMobile.innerHTML = paletteHTML;
+            addPaletteEventListeners();
+        }
+
+        function addPaletteEventListeners() {
+            document.querySelectorAll('#addColorBtn').forEach(btn => btn.addEventListener('click', handleAddColor));
+            document.querySelectorAll('#clearPaletteBtn').forEach(btn => btn.addEventListener('click', handleClearPalette));
+            document.querySelectorAll('#paletteContainer').forEach(container => container.addEventListener('click', handlePaletteInteraction));
+        }
+
+        // --- 事件處理函數 ---
+
+        function handleAddColor() {
+            const hexInput = document.querySelector('#hexInput');
+            const colorPicker = document.querySelector('#colorPicker');
+            const hexRegex = /^#?([a-f\d]{3}|[a-f\d]{6})$/i;
+            
+            let colorToAdd = null;
+
+            if (hexInput.value && hexRegex.test(hexInput.value)) {
+                colorToAdd = hexToRgb(hexInput.value);
+                hexInput.value = ''; // 清空輸入框
+            } else if (hexInput.value) {
+                showToast('無效的 HEX 色碼', 'error');
+                return;
+            } else {
+                colorToAdd = hexToRgb(colorPicker.value);
+            }
+
+            if (colorToAdd) {
+                addColorToPalette(colorToAdd.r, colorToAdd.g, colorToAdd.b);
+            }
+        }
+
+        function handleClearPalette() {
+            paletteColors = [];
+            renderPalette();
+        }
+        
+        function handlePaletteInteraction(e) {
+            const target = e.target;
+            if (target.closest('.remove-color-btn')) {
+                const index = target.closest('.remove-color-btn').dataset.index;
+                paletteColors.splice(index, 1);
+                renderPalette();
+            } else if (target.tagName === 'P' && target.textContent !== '空') {
+                copyToClipboard(target.textContent);
+            }
+        }
+
+        function addColorToPalette(r, g, b) {
+            if (paletteColors.length >= MAX_PALETTE_SIZE) {
+                showToast('色盤已滿！', 'error');
+                return;
+            }
+            paletteColors.push({ r, g, b, hex: rgbToHex(r, g, b) });
+            renderPalette();
+        }
+
+        function handleMouseMove(event, targetCanvas) {
+            if (!targetCanvas.classList.contains('loaded')) return;
+            const { r, g, b } = getEventColor(event, targetCanvas);
+            updateColorDisplay(r, g, b);
+        }
+        
+        function handleCanvasClick(event, targetCanvas) {
+            if (!targetCanvas.classList.contains('loaded')) return;
+            const { r, g, b } = getEventColor(event, targetCanvas);
+            addColorToPalette(r, g, b);
+        }
+
+        // --- 輔助函數 ---
+
+        function getEventColor(event, targetCanvas) {
+            const rect = targetCanvas.getBoundingClientRect();
+            const scaleX = targetCanvas.width / rect.width;
+            const scaleY = targetCanvas.height / rect.height;
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+            const x = (clientX - rect.left) * scaleX;
+            const y = (clientY - rect.top) * scaleY;
+            const pixel = targetCanvas.getContext('2d').getImageData(x, y, 1, 1).data;
+            return { r: pixel[0], g: pixel[1], b: pixel[2] };
+        }
+
+        function updateColorDisplay(r, g, b) {
+            const rgbString = `rgb(${r}, ${g}, ${b})`;
+            const hexString = rgbToHex(r, g, b);
+            
+            colorPreview.style.backgroundColor = rgbString;
+            rgbValue.textContent = `RGB: ${r}, ${g}, ${b}`;
+            hexValue.textContent = hexString;
+            
+            mobileColorPreview.style.backgroundColor = rgbString;
+            mobileRgbValue.textContent = `RGB: ${r}, ${g}, ${b}`;
+            mobileHexValue.textContent = hexString;
+        }
+
+        function rgbToHex(r, g, b) {
+            const toHex = c => ('0' + c.toString(16)).slice(-2);
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+        }
+        
+        function hexToRgb(hex) {
+            let shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+            hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+            let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        function showToast(message, type = 'success') {
+            const element = type === 'success' ? toast : toastError;
+            element.textContent = message;
+            element.classList.remove('opacity-0');
+            setTimeout(() => element.classList.add('opacity-0'), 2000);
+        }
+
+        function copyToClipboard(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('已複製到剪貼簿！');
+            } catch (err) {
+                console.error('無法複製文字: ', err);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // --- 事件監聽器綁定 ---
+        
+        // 檔案選擇器
+        imageLoader.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+        // 拖曳上傳
+        [dropZoneDesktop, dropZoneMobile].forEach(zone => {
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('drag-over');
+            });
+            zone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+            });
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                handleFile(e.dataTransfer.files[0]);
+            });
+        });
+
+        // Canvas 互動
+        [canvas, mobileCanvas].forEach(c => {
+            c.addEventListener('mousemove', (e) => handleMouseMove(e, c));
+            c.addEventListener('click', (e) => handleCanvasClick(e, c));
+            c.addEventListener('touchmove', (e) => { e.preventDefault(); handleMouseMove(e, c); });
+            c.addEventListener('touchstart', (e) => { e.preventDefault(); handleMouseMove(e, c); });
+            c.addEventListener('touchend', (e) => {
+                if (e.changedTouches.length > 0) {
+                    const touchEvent = { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY };
+                    handleCanvasClick(touchEvent, c);
+                }
+            });
+        });
+
+        // 複製色碼
+        [rgbValue, hexValue, mobileRgbValue, mobileHexValue].forEach(el => {
+            el.addEventListener('click', () => copyToClipboard(el.textContent));
+        });
+
+        // --- 初始渲染 ---
+        renderPalette();
+
+    </script>
+</body>
+</html>
